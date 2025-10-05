@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mock Google Drive Clone</title>
+    <!-- Load Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" xintegrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <!-- Load Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    
+    <!-- Custom Styles for Google Drive look and feel -->
+    <style>
+        :root {
+            --drive-blue: #0d6efd;
+            --drive-bg: #f7f9fc;
+            --sidebar-bg: #fff;
+            --sidebar-width: 280px;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--drive-bg);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .auth-container {
+            max-width: 450px;
+            width: 100%;
+            margin: 4rem auto;
+            flex-grow: 1; 
+        }
+        .auth-card {
+            border-radius: 1rem;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        /* --- Drive UI Styles --- */
+        .drive-container-hidden {
+            display: none !important;
+        }
+        .drive-container {
+            flex-grow: 1;
+            display: flex;
+        }
+        .drive-sidebar {
+            width: var(--sidebar-width);
+            background-color: var(--sidebar-bg);
+            border-right: 1px solid #eee;
+            padding: 1.5rem 1rem;
+            flex-shrink: 0;
+            overflow-y: auto;
+        }
+        .drive-main-content {
+            flex-grow: 1;
+            padding: 0 2rem;
+            overflow-y: auto;
+        }
+        .drive-topbar {
+            padding: 1rem 0;
+            border-bottom: 1px solid #eee;
+            margin-bottom: 1.5rem;
+        }
+        .drive-nav-item {
+            border-radius: 0 2rem 2rem 0;
+            padding-left: 1.5rem !important;
+        }
+        .drive-nav-item.active {
+            background-color: #e6f4ea !important; /* Lighter shade of green for active link */
+            color: #1a73e8 !important; /* Google blue for text */
+            font-weight: 600;
+        }
+        
+        /* New Button Style */
+        .btn-new {
+            background-color: #fff;
+            color: #3c4043;
+            border: 1px solid #dadce0;
+            box-shadow: 0 1px 2px 0 rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15);
+            padding: 0.75rem 1.5rem;
+            border-radius: 1.5rem;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .btn-new:hover {
+            box-shadow: 0 1px 3px 0 rgba(0,0,0,0.2), 0 2px 6px 2px rgba(0,0,0,0.1);
+            background-color: #f8f9fa;
+        }
+        
+        /* Suggested Folders */
+        .folder-card {
+            border: 1px solid #dadce0;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        .folder-card:hover {
+            box-shadow: 0 1px 2px 0 rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15);
+            border-color: #c5c5c5;
+        }
+
+        /* File List Table */
+        .file-row {
+            transition: background-color 0.15s;
+        }
+        .file-row:hover {
+            background-color: #f1f3f4;
+            cursor: pointer;
+        }
+        .file-icon {
+            font-size: 1.25rem;
+        }
+        
+        /* Storage Progress Bar */
+        .storage-progress {
+            background-color: #e0e0e0;
+            border-radius: 1rem;
+            height: 8px;
+            margin-bottom: 0.5rem;
+        }
+        .progress-bar {
+            background-color: var(--drive-blue) !important;
+            border-radius: 1rem;
+        }
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header (Always Visible) -->
+    <header class="container-fluid p-3 bg-white shadow-sm border-bottom">
+        <div class="d-flex justify-content-between align-items-center">
+            <h1 class="h4 text-dark mb-0 fw-bold d-flex align-items-center">
+                <i class="bi bi-google me-2 text-success fs-3"></i> Mock Drive
+            </h1>
+            <div id="user-details" class="d-flex align-items-center text-sm hidden">
+                <span class="text-secondary me-2 d-none d-md-inline">Welcome:</span>
+                <div id="auth-details" class="fw-bold text-primary text-truncate me-3"></div>
+                <button onclick="handleSignOut()" class="btn btn-sm btn-outline-danger rounded-circle" title="Sign Out">
+                    <i class="bi bi-box-arrow-right"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- AUTHENTICATION CONTAINER -->
+    <div id="auth-container" class="auth-container">
+        <div class="card p-4 auth-card bg-white">
+            <div id="status-message" class="mb-3"></div>
+            <div id="content-container">
+                <div class="text-center p-5 text-secondary">Loading...</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- MOCK GOOGLE DRIVE INTERFACE CONTAINER -->
+    <div id="drive-container" class="drive-container drive-container-hidden">
+        
+        <!-- Sidebar -->
+        <div class="drive-sidebar d-flex flex-column">
+            <button class="btn btn-new mb-4 align-self-start" onclick="document.getElementById('file-upload-input').click()">
+                <i class="bi bi-plus-lg me-2"></i>New
+            </button>
+            <input type="file" id="file-upload-input" style="display: none;" onchange="handleFileUpload(event)">
+
+            <ul class="nav flex-column flex-grow-1" id="sidebar-nav">
+                <li class="nav-item">
+                    <a href="#" data-view="my_drive" class="nav-link text-dark drive-nav-item active" onclick="setDriveView('my_drive')">
+                        <i class="bi bi-house-door-fill me-2"></i>My Drive
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#" data-view="shared" class="nav-link text-dark drive-nav-item" onclick="setDriveView('shared')">
+                        <i class="bi bi-people-fill me-2"></i>Shared with me
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#" data-view="recent" class="nav-link text-dark drive-nav-item" onclick="setDriveView('recent')">
+                        <i class="bi bi-clock-history me-2"></i>Recent
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#" data-view="starred" class="nav-link text-dark drive-nav-item" onclick="setDriveView('starred')">
+                        <i class="bi bi-star-fill me-2"></i>Starred
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#" data-view="bin" class="nav-link text-dark drive-nav-item" onclick="setDriveView('bin')">
+                        <i class="bi bi-trash-fill me-2"></i>Bin
+                    </a>
+                </li>
+            </ul>
+
+            <!-- Storage Meter -->
+            <div class="mt-auto pt-3 border-top">
+                <h6 class="text-muted small mb-3">Storage</h6>
+                <div class="storage-progress">
+                    <div class="progress-bar" role="progressbar" id="storage-progress-bar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                </div>
+                <p class="small mb-1"><span id="storage-used">0 GB</span> of <span id="storage-total">15 GB</span> used</p>
+                <a href="#" class="btn btn-sm btn-outline-primary w-100" onclick="displayStatus('Simulating Storage Upgrade link click.','info')">Get more storage</a>
+            </div>
+        </div>
+
+        <!-- Main Content Area -->
+        <div class="drive-main-content">
+            
+            <div class="drive-topbar d-flex justify-content-between align-items-center">
+                <input type="text" id="search-input" class="form-control form-control-lg rounded-pill shadow-sm" style="max-width: 600px;" placeholder="Search in Drive..." onkeyup="renderFileList()">
+                <div class="d-flex align-items-center">
+                    <button class="btn btn-light rounded-circle me-2" title="Settings" onclick="displayStatus('Settings feature is a mock-up.','info')"><i class="bi bi-gear"></i></button>
+                    <button class="btn btn-light rounded-circle" title="Help" onclick="displayStatus('Help feature is a mock-up.','info')"><i class="bi bi-question-circle"></i></button>
+                </div>
+            </div>
+            
+            <h2 class="h5 fw-bold text-dark mb-4" id="content-header">My Drive</h2>
+
+            <!-- Suggested Folders (Only visible in My Drive view) -->
+            <div class="mb-5" id="suggested-folders-section">
+                <h3 class="h6 text-muted mb-3">Suggested Folders</h3>
+                <div class="row">
+                    <div class="col-12 col-md-4 col-lg-3 mb-3">
+                        <div class="card p-3 folder-card rounded-2" onclick="mockFolderFilter('Project Docs')">
+                            <i class="bi bi-folder-fill text-warning fs-3 mb-2"></i>
+                            <span class="fw-medium">Project Docs</span>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-4 col-lg-3 mb-3">
+                        <div class="card p-3 folder-card rounded-2" onclick="mockFolderFilter('Shared Photos')">
+                            <i class="bi bi-folder-fill text-warning fs-3 mb-2"></i>
+                            <span class="fw-medium">Shared Photos</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- File List -->
+            <div>
+                <h3 class="h6 text-muted mb-3" id="file-list-header">Files</h3>
+                <div class="table-responsive">
+                    <table class="table align-middle">
+                        <thead>
+                            <tr class="text-muted small text-uppercase">
+                                <th scope="col" style="width: 45%;" class="fw-normal">Name</th>
+                                <th scope="col" style="width: 25%;" class="fw-normal">Type</th>
+                                <th scope="col" style="width: 20%;" class="fw-normal">Size</th>
+                                <th scope="col" style="width: 10%;" class="fw-normal"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="file-list">
+                            <!-- Dynamic file rows will be inserted here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- File View Modal (for viewing content) -->
+    <div class="modal fade" id="fileViewModal" tabindex="-1" aria-labelledby="fileViewModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="fileViewModalLabel">File Preview</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small" id="fileViewMeta"></p>
+                    <div id="fileViewContentContainer" class="p-3 bg-light border rounded text-center">
+                        <!-- Content preview (image/text/etc.) will be loaded here -->
+                        <span class="text-secondary">Loading preview...</span>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-warning" id="toggleStarredButton"><i class="bi bi-star me-2"></i>Star/Unstar</button>
+                    <button type="button" class="btn btn-info" id="mockShareButton"><i class="bi bi-share me-2"></i>Share</button>
+                    <button type="button" class="btn btn-danger" id="deleteFileButton"><i class="bi bi-trash me-2"></i>Move to Bin</button>
+                    <button type="button" class="btn btn-success hidden" id="restoreFileButton"><i class="bi bi-arrow-counterclockwise me-2"></i>Restore</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Load Bootstrap 5 JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" xintegrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdIeHz" crossorigin="anonymous"></script>
+
+    <script>
+        // --- GLOBAL STATE AND UI ELEMENTS ---
+        const LOCAL_STORAGE_KEY = 'mock_auth_users';
+        const SESSION_KEY = 'current_user_email';
+        const FILES_STORAGE_PREFIX = 'mock_drive_files_';
+        
+        const MAX_STORAGE_GB = 15;
+        const GB_TO_BYTES = 1024 * 1024 * 1024;
+
+        // Check for existing session on page load
+        let currentUserEmail = localStorage.getItem(SESSION_KEY);
+        let viewState = currentUserEmail ? 'dashboard_access' : 'login';
+        let driveView = 'my_drive'; // New state for sidebar view
+
+        const statusEl = document.getElementById('status-message');
+        const authContainerEl = document.getElementById('auth-container');
+        const contentEl = document.getElementById('content-container');
+        const userDetailsEl = document.getElementById('user-details');
+        const authDetailsEl = document.getElementById('auth-details');
+        const driveContainerEl = document.getElementById('drive-container');
+        const fileListEl = document.getElementById('file-list');
+        const storageUsedEl = document.getElementById('storage-used');
+        const storageTotalEl = document.getElementById('storage-total');
+        const progressBarEl = document.getElementById('storage-progress-bar');
+        const contentHeaderEl = document.getElementById('content-header');
+        const searchInputEl = document.getElementById('search-input');
+        const suggestedFoldersEl = document.getElementById('suggested-folders-section');
+        
+        let fileViewModal;
+
+        // --- UTILITY FUNCTIONS ---
+
+        const getUserFilesKey = (email) => `${FILES_STORAGE_PREFIX}${email}`;
+
+        const hashPassword = (password) => {
+            return password.split('').reverse().join('') + password.length;
+        };
+        
+        const loadUsers = () => {
+            const usersJson = localStorage.getItem(LOCAL_STORAGE_KEY);
+            return usersJson ? JSON.parse(usersJson) : {};
+        };
+
+        const saveUsers = (users) => {
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(users));
+        };
+
+        const formatBytes = (bytes, decimals = 2) => {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+        }
+
+        const getIconForMimeType = (mime) => {
+            if (mime.startsWith('image/')) return 'bi-file-earmark-image-fill text-info';
+            if (mime.includes('pdf')) return 'bi-file-earmark-pdf-fill text-danger';
+            if (mime.includes('text/') || mime.includes('json')) return 'bi-file-earmark-text-fill text-success';
+            if (mime.includes('word') || mime.includes('doc')) return 'bi-file-earmark-word-fill text-primary';
+            if (mime.includes('sheet') || mime.includes('excel')) return 'bi-file-earmark-spreadsheet-fill text-success';
+            if (mime.includes('zip') || mime.includes('rar')) return 'bi-file-earmark-zip-fill text-warning';
+            return 'bi-file-earmark-fill text-secondary';
+        };
+
+        const displayStatus = (message, type = 'info') => {
+            if (!statusEl) return;
+            statusEl.textContent = message;
+            statusEl.className = 'alert mt-3 mb-0';
+            
+            switch(type) {
+                case 'success': statusEl.classList.add('alert-success'); break;
+                case 'error': statusEl.classList.add('alert-danger'); break;
+                case 'info': default: statusEl.classList.add('alert-info'); break;
+            }
+
+            setTimeout(() => {
+                statusEl.textContent = '';
+                statusEl.className = 'mb-3';
+            }, 5000);
+        };
+
+        // --- MOCK DRIVE FUNCTIONS ---
+        
+        const loadFiles = (email) => {
+            const key = getUserFilesKey(email);
+            const filesJson = localStorage.getItem(key);
+            // Ensure every file has the necessary filtering properties upon load
+            const files = filesJson ? JSON.parse(filesJson) : [];
+            return files.map(file => ({
+                ...file,
+                isShared: file.isShared === undefined ? false : file.isShared,
+                isStarred: file.isStarred === undefined ? false : file.isStarred,
+                isDeleted: file.isDeleted === undefined ? false : file.isDeleted,
+                uploadedAt: file.uploadedAt || new Date().toISOString()
+            }));
+        };
+
+        const saveFiles = (email, files) => {
+            const key = getUserFilesKey(email);
+            localStorage.setItem(key, JSON.stringify(files));
+            renderFileList();
+            updateStorageMeter();
+        };
+
+        const updateFileProperty = (fileName, property, value) => {
+            if (!currentUserEmail) return;
+            let files = loadFiles(currentUserEmail);
+            const fileIndex = files.findIndex(file => file.name === fileName);
+            
+            if (fileIndex !== -1) {
+                files[fileIndex][property] = value;
+                saveFiles(currentUserEmail, files);
+                
+                // If the modal is open, ensure it reflects the new state
+                if (fileViewModal && fileViewModal._isShown) {
+                    showFileContent(files[fileIndex]);
+                }
+            }
+        };
+
+        const mockDeleteFile = (fileName) => {
+             updateFileProperty(fileName, 'isDeleted', true);
+             displayStatus(`File '${fileName}' moved to **Bin**.`, 'info');
+             fileViewModal.hide();
+        };
+
+        const restoreFile = (fileName) => {
+            updateFileProperty(fileName, 'isDeleted', false);
+            displayStatus(`File '${fileName}' restored from Bin to My Drive.`, 'success');
+            fileViewModal.hide();
+        };
+
+        const updateStorageMeter = () => {
+            if (!currentUserEmail) return;
+
+            // Only count files that are NOT in the bin for storage calculation
+            const files = loadFiles(currentUserEmail).filter(file => !file.isDeleted);
+            
+            // Calculate total bytes used by summing the size property of all files
+            const totalUsedBytes = files.reduce((sum, file) => sum + (file.size || 0), 0);
+            
+            const totalStorageBytes = MAX_STORAGE_GB * GB_TO_BYTES;
+
+            const percentageUsed = (totalUsedBytes / totalStorageBytes) * 100;
+
+            storageUsedEl.textContent = formatBytes(totalUsedBytes);
+            storageTotalEl.textContent = `${MAX_STORAGE_GB} GB`;
+            
+            progressBarEl.style.width = `${Math.min(percentageUsed, 100)}%`;
+            progressBarEl.setAttribute('aria-valuenow', percentageUsed.toFixed(2));
+            
+            if (percentageUsed >= 90) {
+                progressBarEl.classList.add('bg-danger');
+            } else {
+                progressBarEl.classList.remove('bg-danger');
+            }
+        };
+
+
+        window.renderFileList = () => {
+            if (!fileListEl || !currentUserEmail) return;
+
+            let files = loadFiles(currentUserEmail);
+            const searchTerm = searchInputEl.value.toLowerCase().trim();
+            
+            // --- 1. Filter by View State ---
+            let filteredFiles = files.filter(file => {
+                // Bin view shows deleted files, all others show non-deleted files
+                const isVisible = driveView === 'bin' ? file.isDeleted : !file.isDeleted;
+                if (!isVisible) return false;
+
+                switch (driveView) {
+                    case 'my_drive':
+                        return !file.isShared; // Only owned, not explicitly shared with me
+                    case 'shared':
+                        return file.isShared;
+                    case 'starred':
+                        return file.isStarred;
+                    case 'recent':
+                    case 'bin':
+                        return true;
+                    default:
+                        return true;
+                }
+            });
+
+            // --- 2. Filter by Search Term (applies to all views) ---
+            if (searchTerm) {
+                filteredFiles = filteredFiles.filter(file => 
+                    file.name.toLowerCase().includes(searchTerm)
+                );
+            }
+
+            // --- 3. Sort by View State ---
+            if (driveView === 'recent') {
+                // Sort by uploadedAt descending (most recent first)
+                filteredFiles.sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));
+            } else if (driveView === 'bin') {
+                 // Sort bin by deleted date (mocked by uploadedAt)
+                filteredFiles.sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));
+            } else {
+                 // Default sort by name for My Drive, Shared, Starred
+                 filteredFiles.sort((a, b) => a.name.localeCompare(b.name));
+            }
+
+            fileListEl.innerHTML = ''; 
+
+            if (filteredFiles.length === 0) {
+                fileListEl.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="text-center text-muted py-5">
+                            <i class="bi bi-cloud-slash fs-3 d-block mb-2"></i>
+                            ${searchTerm ? 'No files match your search criteria.' : `Your **${driveView.replace('_', ' ')}** is empty.`}
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            filteredFiles.forEach(file => {
+                const row = document.createElement('tr');
+                row.className = 'file-row';
+                row.setAttribute('data-file-name', file.name);
+                
+                const typeName = file.mimeType.split('/')[1] || 'File';
+                const starIcon = file.isStarred ? 'bi-star-fill text-warning' : 'bi-star';
+                
+                row.innerHTML = `
+                    <td>
+                        <i class="bi ${getIconForMimeType(file.mimeType)} file-icon me-2"></i>
+                        ${file.name}
+                        ${file.isShared ? '<i class="bi bi-people-fill text-info ms-2" title="Shared with others"></i>' : ''}
+                    </td>
+                    <td>${typeName.toUpperCase()}</td>
+                    <td>${formatBytes(file.size)}</td>
+                    <td class="text-end">
+                        <i class="bi ${starIcon} me-3" title="${file.isStarred ? 'Starred' : 'Not Starred'}"></i>
+                        <i class="bi bi-three-dots-vertical text-secondary"></i>
+                    </td>
+                `;
+                row.addEventListener('click', () => showFileContent(file));
+                fileListEl.appendChild(row);
+            });
+        };
+        
+        const showFileContent = (file) => {
+            const container = document.getElementById('fileViewContentContainer');
+            container.innerHTML = '';
+            
+            document.getElementById('fileViewModalLabel').textContent = file.name;
+            document.getElementById('fileViewMeta').textContent = `Uploaded: ${new Date(file.uploadedAt).toLocaleString()} | Size: ${formatBytes(file.size)} | Type: ${file.mimeType}`;
+            
+            const deleteButton = document.getElementById('deleteFileButton');
+            const restoreButton = document.getElementById('restoreFileButton');
+            const toggleStarredButton = document.getElementById('toggleStarredButton');
+            const mockShareButton = document.getElementById('mockShareButton');
+            
+            // Set button actions based on view/file state
+            if (file.isDeleted) {
+                deleteButton.classList.add('hidden');
+                restoreButton.classList.remove('hidden');
+                toggleStarredButton.classList.add('hidden');
+                mockShareButton.classList.add('hidden');
+                restoreButton.onclick = () => restoreFile(file.name);
+            } else {
+                deleteButton.classList.remove('hidden');
+                restoreButton.classList.add('hidden');
+                toggleStarredButton.classList.remove('hidden');
+                mockShareButton.classList.remove('hidden');
+                deleteButton.onclick = () => mockDeleteFile(file.name);
+            }
+
+            // Star/Unstar button logic
+            toggleStarredButton.textContent = file.isStarred ? 'Unstar' : 'Star';
+            toggleStarredButton.classList.toggle('btn-warning', !file.isStarred);
+            toggleStarredButton.classList.toggle('btn-outline-warning', file.isStarred);
+            toggleStarredButton.onclick = () => {
+                updateFileProperty(file.name, 'isStarred', !file.isStarred);
+                displayStatus(`File '${file.name}' ${!file.isStarred ? 'starred' : 'unstarred'}.`, 'success');
+            };
+
+            mockShareButton.onclick = () => {
+                updateFileProperty(file.name, 'isShared', true);
+                displayStatus(`File '${file.name}' is now mock-shared! (Visible in Shared view)`, 'info');
+            };
+
+            // Simple content preview based on mime type
+            if (file.mimeType.startsWith('image/')) {
+                const img = document.createElement('img');
+                img.src = file.data;
+                img.className = 'img-fluid rounded shadow-sm';
+                container.appendChild(img);
+            } else if (file.mimeType.includes('text') || file.mimeType.includes('json')) {
+                const pre = document.createElement('pre');
+                const content = atob(file.data.split(',')[1] || file.data);
+                pre.textContent = content.substring(0, 1000) + (content.length > 1000 ? '...' : ''); 
+                pre.className = 'text-start overflow-auto';
+                container.appendChild(pre);
+            } else {
+                container.innerHTML = `
+                    <i class="bi bi-file-earmark-fill fs-1 text-secondary"></i>
+                    <p class="mt-3">No built-in preview for file type: <strong>${file.mimeType}</strong>.</p>
+                `;
+            }
+
+            if (!fileViewModal) {
+                const fileViewModalEl = document.getElementById('fileViewModal');
+                fileViewModal = new bootstrap.Modal(fileViewModalEl);
+            }
+            fileViewModal.show();
+        };
+
+        window.handleFileUpload = (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            if (!currentUserEmail) {
+                return displayStatus('You must be logged in to upload files.', 'error');
+            }
+            
+            const files = loadFiles(currentUserEmail).filter(f => !f.isDeleted); // Only count active files
+            const totalUsedBytes = files.reduce((sum, f) => sum + (f.size || 0), 0);
+            const totalStorageBytes = MAX_STORAGE_GB * GB_TO_BYTES;
+
+            if (totalUsedBytes + file.size > totalStorageBytes) {
+                return displayStatus(`Upload failed: File size (${formatBytes(file.size)}) exceeds remaining mock storage capacity.`, 'error');
+            }
+            
+            const reader = new FileReader();
+
+            reader.onload = (e) => {
+                const fileData = e.target.result;
+                
+                const newFile = {
+                    name: file.name,
+                    mimeType: file.type || 'application/octet-stream',
+                    size: file.size,
+                    uploadedAt: new Date().toISOString(), // Use ISO string for accurate date sorting
+                    data: fileData, 
+                    isShared: false,
+                    isStarred: false,
+                    isDeleted: false,
+                };
+
+                if (loadFiles(currentUserEmail).some(f => f.name === newFile.name && !f.isDeleted)) {
+                    return displayStatus(`File with name '${newFile.name}' already exists (or is in the Bin).`, 'error');
+                }
+
+                const allFiles = loadFiles(currentUserEmail);
+                allFiles.push(newFile);
+                saveFiles(currentUserEmail, allFiles);
+                displayStatus(`File '${newFile.name}' uploaded successfully!`, 'success');
+            };
+
+            reader.onerror = () => {
+                displayStatus('Error reading file for upload.', 'error');
+            };
+
+            reader.readAsDataURL(file);
+            event.target.value = ''; 
+        };
+
+        // --- DRIVE VIEW STATE HANDLER ---
+
+        window.setDriveView = (newView) => {
+            if (driveView === newView) return;
+            driveView = newView;
+            searchInputEl.value = ''; // Clear search on view change
+            
+            // 1. Update Header Text
+            const viewTitles = {
+                'my_drive': 'My Drive',
+                'shared': 'Shared with me',
+                'recent': 'Recent',
+                'starred': 'Starred',
+                'bin': 'Bin / Trash'
+            };
+            contentHeaderEl.textContent = viewTitles[newView] || 'Drive';
+            
+            // 2. Hide/Show Suggested Folders
+            suggestedFoldersEl.classList.toggle('hidden', newView !== 'my_drive');
+
+            // 3. Update Sidebar Active Class
+            document.querySelectorAll('#sidebar-nav .drive-nav-item').forEach(link => {
+                if (link.getAttribute('data-view') === newView) {
+                    link.classList.add('active');
+                } else {
+                    link.classList.remove('active');
+                }
+            });
+            
+            // 4. Re-render File List
+            renderFileList();
+        };
+
+        window.mockFolderFilter = (folderName) => {
+            // For a mock, we just change the search input to simulate filtering
+            searchInputEl.value = folderName;
+            renderFileList();
+            displayStatus(`Filtered file list by **${folderName}** (mock filter via search).`, 'info');
+        };
+
+
+        // --- CORE RENDERER AND UI LOGIC ---
+
+        const renderView = () => {
+            // Handle UI visibility based on state
+            if (viewState === 'drive') {
+                authContainerEl.classList.add('hidden');
+                driveContainerEl.classList.remove('drive-container-hidden'); 
+                driveContainerEl.classList.add('d-flex'); 
+                setDriveView(driveView); // Re-run setDriveView to ensure active state and initial render
+            } else {
+                // Show auth container, hide drive container
+                authContainerEl.classList.remove('hidden');
+                driveContainerEl.classList.add('drive-container-hidden');
+                driveContainerEl.classList.remove('d-flex');
+                
+                contentEl.innerHTML = '';
+                let html = '';
+
+                switch (viewState) {
+                    case 'login':
+                        html = renderAuthForm('Sign In', 'signInForm', 'Need an account?', 'register', 'Forgot password?');
+                        break;
+                    case 'register':
+                        html = renderAuthForm('Create Account', 'signUpForm', 'Already have an account?', 'login');
+                        break;
+                    case 'forgot':
+                        html = renderAuthForm('Password Reset (Mock)', 'resetForm', 'Back to Sign In', 'login', null, true);
+                        break;
+                    case 'dashboard_access':
+                        const user = loadUsers()[currentUserEmail];
+                        const displayEmail = user ? user.email : 'User';
+                        html = `
+                            <h2 class="h3 text-center mb-4 fw-bold text-dark">Welcome, ${displayEmail.split('@')[0]}!</h2>
+                            <div class="card p-4 mb-4 border-success shadow-sm">
+                                <h4 class="h5 card-title d-flex align-items-center text-success">
+                                    <i class="bi bi-cloud-check-fill me-2 fs-4"></i>
+                                    Mock Drive Access Ready
+                                </h4>
+                                <p class="card-text text-muted small">
+                                    Click below to access your persistent mock Google Drive files.
+                                </p>
+                                <button class="btn btn-primary btn-lg w-100 mt-2 fw-bold" onclick="changeViewState('drive')">
+                                    <span class="me-2">Open Mock Drive</span>
+                                    <i class="bi bi-arrow-right"></i>
+                                </button>
+                            </div>
+                            <button onclick="handleSignOut()" class="btn btn-sm btn-outline-secondary w-100 mt-3">Sign Out</button>
+                        `;
+                        break;
+                }
+                contentEl.innerHTML = html;
+            }
+            
+            attachEventListeners();
+            updateUserHeader();
+        };
+        
+        // Renders the common authentication form structure (omitted for brevity)
+        const renderAuthForm = (title, formId, secondaryText, secondaryView, linkText = null, isReset = false) => {
+            const isLogin = formId === 'signInForm';
+            return `
+                <h2 class="h3 text-center mb-4 fw-bold text-dark">${title}</h2>
+                <form id="${formId}" class="mb-3">
+                    <div class="mb-3">
+                        <label for="${formId.includes('In') ? 'loginEmail' : formId.includes('Up') ? 'regEmail' : 'resetEmail'}" class="form-label">Email address</label>
+                        <input type="email" id="${formId.includes('In') ? 'loginEmail' : formId.includes('Up') ? 'regEmail' : 'resetEmail'}" class="form-control form-control-lg" placeholder="name@example.com" required>
+                    </div>
+                    ${isReset ? `
+                        <div class="mb-4">
+                            <label for="resetNewPassword" class="form-label">New Password</label>
+                            <input type="password" id="resetNewPassword" class="form-control form-control-lg" placeholder="Min 6 characters" required minlength="6">
+                        </div>
+                    ` : `
+                        <div class="mb-4">
+                            <label for="${formId.includes('In') ? 'loginPassword' : 'regPassword'}" class="form-label">Password</label>
+                            <input type="password" id="${formId.includes('In') ? 'loginPassword' : 'regPassword'}" class="form-control form-control-lg" placeholder="••••••••" required minlength="${formId === 'signUpForm' ? '6' : '1'}">
+                        </div>
+                    `}
+                    <button type="submit" class="btn btn-primary btn-lg w-100 mb-3">${title}</button>
+                </form>
+                <div class="d-flex justify-content-between align-items-center">
+                    <button onclick="changeViewState('${secondaryView}')" class="btn btn-link text-decoration-none p-0 text-start">
+                        ${secondaryText} ${isLogin ? 'Sign Up' : 'Sign In'}
+                    </button>
+                    ${linkText ? `<button onclick="changeViewState('forgot')" class="btn btn-link text-decoration-none p-0 text-end">${linkText}</button>` : ''}
+                </div>
+            `;
+        };
+
+
+        window.changeViewState = (newState) => {
+            viewState = newState;
+            statusEl.textContent = '';
+            statusEl.className = 'mb-3';
+            renderView();
+        }
+
+        const updateUserHeader = () => {
+            if (currentUserEmail) {
+                userDetailsEl.classList.remove('hidden');
+                authDetailsEl.textContent = currentUserEmail;
+            } else {
+                userDetailsEl.classList.add('hidden');
+            }
+        };
+
+        // --- AUTHENTICATION HANDLERS (omitted for brevity, unchanged) ---
+        
+        const handleSignUp = (e) => {
+            e.preventDefault();
+            const email = document.getElementById('regEmail').value.trim();
+            const password = document.getElementById('regPassword').value;
+            
+            if (password.length < 6) {
+                return displayStatus('Password must be at least 6 characters.', 'error');
+            }
+
+            const result = mockRegister(email, password);
+
+            if (result.success) {
+                currentUserEmail = email;
+                localStorage.setItem(SESSION_KEY, email);
+                displayStatus('Registration successful! You are now signed in.', 'success');
+                changeViewState('dashboard_access');
+            } else {
+                displayStatus(result.message, 'error');
+            }
+        };
+        
+        const handleSignIn = (e) => {
+            e.preventDefault();
+            const email = document.getElementById('loginEmail').value.trim();
+            const password = document.getElementById('loginPassword').value;
+
+            const result = mockLogin(email, password);
+
+            if (result.success) {
+                currentUserEmail = email;
+                localStorage.setItem(SESSION_KEY, email);
+                displayStatus(`Welcome back! You can now open your Mock Drive.`, 'success');
+                changeViewState('dashboard_access');
+            } else {
+                displayStatus(result.message, 'error');
+            }
+        };
+
+        window.handleSignOut = () => {
+            currentUserEmail = null;
+            localStorage.removeItem(SESSION_KEY);
+            displayStatus("You have been signed out.", 'info');
+            changeViewState('login');
+        };
+
+        const handleResetPassword = (e) => {
+            e.preventDefault();
+            const email = document.getElementById('resetEmail').value.trim();
+            const newPassword = document.getElementById('resetNewPassword').value;
+            
+            if (newPassword.length < 6) {
+                return displayStatus('New password must be at least 6 characters.', 'error');
+            }
+            
+            const users = loadUsers();
+            if (!users[email]) {
+                return displayStatus('Email not registered. Cannot change password.', 'error');
+            }
+
+            const result = mockChangePassword(email, newPassword);
+
+            if (result.success) {
+                displayStatus(`Password for ${email} successfully changed! Please sign in.`, 'success');
+                changeViewState('login');
+            } else {
+                displayStatus(result.message, 'error');
+            }
+        };
+        
+        const mockRegister = (email, password) => {
+            const users = loadUsers();
+            if (users[email]) {
+                return { success: false, message: 'This email is already registered.' };
+            }
+            const passwordHash = hashPassword(password);
+            const uid = 'user_' + Math.random().toString(36).substring(2, 9);
+            users[email] = { email, passwordHash, uid };
+            saveUsers(users);
+            return { success: true, user: users[email] };
+        };
+
+        const mockLogin = (email, password) => {
+            const users = loadUsers();
+            const user = users[email];
+            if (!user || user.passwordHash !== hashPassword(password)) {
+                return { success: false, message: 'Invalid email or password.' };
+            }
+            return { success: true, user };
+        };
+
+        const mockChangePassword = (email, newPassword) => {
+            const users = loadUsers();
+            const user = users[email];
+            if (!user) {
+                return { success: false, message: 'User not found.' };
+            }
+            user.passwordHash = hashPassword(newPassword);
+            saveUsers(users);
+            return { success: true };
+        };
+
+        // --- INITIALIZATION ---
+
+        const attachEventListeners = () => {
+            const signInForm = document.getElementById('signInForm');
+            const signUpForm = document.getElementById('signUpForm');
+            const resetForm = document.getElementById('resetForm');
+
+            if (signInForm) signInForm.onsubmit = handleSignIn;
+            if (signUpForm) signUpForm.onsubmit = handleSignUp;
+            if (resetForm) resetForm.onsubmit = handleResetPassword;
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const fileViewModalEl = document.getElementById('fileViewModal');
+            if (fileViewModalEl) {
+                fileViewModal = new bootstrap.Modal(fileViewModalEl);
+            }
+            storageTotalEl.textContent = `${MAX_STORAGE_GB} GB`;
+            renderView();
+        });
+    </script>
+</body>
+</html>
